@@ -1,4 +1,4 @@
-# Operating Systems 2
+# Operating Systems
 
-Operating Systems class at UFSCar AND Drexel University (check projects individually).
+Operating Systems and Parallel Programming classes at UFSCar, UNICAMP and Drexel University (check projects individually).
 
