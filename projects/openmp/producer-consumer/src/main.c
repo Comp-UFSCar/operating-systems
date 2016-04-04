@@ -300,6 +300,7 @@ main(int argc, char * argv[])
 // power management:
 //
 //
+
 // Profile results
 // ---------------
 //
@@ -347,6 +348,7 @@ main(int argc, char * argv[])
 //  0.00      2.73     0.00        1     0.00     0.00  parallel_producer_consumer
 //
 //
+
 // Compilation optimization results
 // --------------------------------
 //
