@@ -298,7 +298,8 @@ main(int argc, char * argv[])
 // cache_alignment	: 64
 // address sizes	: 39 bits physical, 48 bits virtual
 // power management:
-
+//
+//
 // Profile results
 // ---------------
 //
@@ -344,7 +345,8 @@ main(int argc, char * argv[])
 // 98.50      2.73     2.73        1     2.73     2.73  main
 //  0.00      2.73     0.00   137780     0.00     0.00  current_agent
 //  0.00      2.73     0.00        1     0.00     0.00  parallel_producer_consumer
-
+//
+//
 // Compilation optimization results
 // --------------------------------
 //
