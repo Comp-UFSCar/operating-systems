@@ -18,17 +18,16 @@
 double *
 min_max_in(double *vector, int length)
 {
-    int MIN = 0, MAX = 1;
-    int i;
-    double values = double[2];
+    int MIN = 0, MAX = 1, i;
+    double *bounds = (double *) malloc(2 * sizeof(double));
     
-    values[MIN] = values[MAX] = vector[0];
+    bounds[MIN] = bounds[MAX] = vector[0];
     
     for (i = 1; i < length; i++)
-        if (vector[i] < values[MIN]) values[MIN] = vector[i];
-        else if (vector[i] > values[MAX]) values[MAX] = vector[i];
+        if (vector[i] < bounds[MIN]) bounds[MIN] = vector[i];
+        else if (vector[i] > bounds[MAX]) bounds[MAX] = vector[i];
     
-    return values;
+    return bounds;
 }
 
 
@@ -46,14 +45,14 @@ min_max_in(double *vector, int length)
 // tuple (min, max), where min and max are integers.
 //
 double *
-bounds_to_integers(double *bound)
+bounds_to_integers(double *bounds)
 {
     int MIN = 0, MAX = 1;
     
-    bound[MIN] = floor(bound[MIN]);
-    bound[MAX] = floor(bound[MAX]);
+    bounds[MIN] = floor(bounds[MIN]);
+    bounds[MAX] = floor(bounds[MAX]);
     
-    return bound;
+    return bounds;
 }
 
 
@@ -68,7 +67,7 @@ compute_histogram(double *values, int n_values, double min, double max, int *bin
     int i, j, count;
     double min_t, max_t, h;
     
-    h = (max - min) / n;
+    h = (max - min) / n_bins;
 
     for (j = 0; j < n_bins; j++)
     {
@@ -100,24 +99,29 @@ int main(int argc, char * argv[]) {
 	
 	double *bounds = bounds_to_integers(min_max_in(values, n_values));
 	
+	min = bounds[0];
+	max = bounds[1];
+	h = (max - min) / n_bins;
+	
 	gettimeofday(&start, NULL);
-	compute_histogram(values, n_values, bounds[0], bounds[1], bins, n_bins);
+	compute_histogram(values, n_values, min, max, bins, n_bins);
 	gettimeofday(&end, NULL);
 
 	elapsed = ((end.tv_sec * 1000000 + end.tv_usec) - \
 	(start.tv_sec * 1000000 + start.tv_usec));
 
-	printf("%.2lf",min);
-	for(i = 1; i <= n; i++) printf(" %.2lf", min + h * i);
+	printf("%.2lf", min);
+	for(i = 1; i <= n_bins; i++) printf(" %.2lf", min + h * i);
 	printf("\n");
 
-	printf("%d",vet[0]);
-	for(i = 1; i < n; i++) printf(" %d", vet[i]);
+	printf("%d", bins[0]);
+	for(i = 1; i < n_bins; i++) printf(" %d", bins[i]);
 	printf("\n");
-	printf("%lu\n",elapsed);
+	printf("%lu\n", elapsed);
 
-	free(vet);
+	free(bins);
 	free(values);
+	free(bounds);
 
 	return 0;
 }
