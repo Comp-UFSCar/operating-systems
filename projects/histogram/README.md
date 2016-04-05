@@ -1,4 +1,3 @@
 # Histogram
 
-Fill bins for an histogram using multithreaded programming.
-
+Fill bins for an histogram using parallel programming.
