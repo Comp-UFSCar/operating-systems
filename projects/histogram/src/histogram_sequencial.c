@@ -16,7 +16,7 @@ double min_val(double * vet,int nval) {
 		if(vet[i] < min)
 			min =  vet[i];
 	}
-	
+
 	return min;
 }
 
@@ -31,7 +31,7 @@ double max_val(double * vet, int nval) {
 		if(vet[i] > max)
 			max =  vet[i];
 	}
-	
+
 	return max;
 }
 
@@ -45,7 +45,7 @@ int * count(double min, double max, int * vet, int nbins, double h, double * val
 		min_t = min + j*h;
 		max_t = min + (j+1)*h;
 		for(i=0;i<nval;i++) {
-			if(val[i] <= max_t && val[i] > min_t) {
+			if(val[i] > min_t && val[i] <= max_t) {
 				count++;
 			}
 		}
@@ -95,13 +95,13 @@ int main(int argc, char * argv[]) {
 	duracao = ((end.tv_sec * 1000000 + end.tv_usec) - \
 	(start.tv_sec * 1000000 + start.tv_usec));
 
-	printf("%.2lf",min);	
+	printf("%.2lf",min);
 	for(i=1;i<=n;i++) {
 		printf(" %.2lf",min + h*i);
 	}
 	printf("\n");
 
-	/* imprime o histograma calculado */	
+	/* imprime o histograma calculado */
 	printf("%d",vet[0]);
 	for(i=1;i<n;i++) {
 		printf(" %d",vet[i]);
