@@ -17,12 +17,15 @@ FILE *popen(const char *command, const char *type);
 /// on cracking the zip file password.
 ///
 typedef struct {
-    int done;
-    int password_found;
-    char command_template[300];
+    int done,
+        password_found,
+        n_threads;
+    char *filename;
+    char *command_template;
 } ck_st_t;
 
-ck_st_t state;
+
+ck_st_t cracking_state;
 pthread_t *workers;
 
 double
@@ -37,17 +40,20 @@ rtclock ()
 }
 
 void *
-crack_password_worker (void *t_params)
+pass_cracker (void *t_params)
 {
-    int rank = (int) t_params;
-
     FILE * fp;
+    int rank = (int) t_params, password;
     char command[400], result[200];
 
-    while (!state.done)
+    password = rank;
+
+    while (!cracking_state.done && password < 500000)
     {
-        int password = next_password();
-        sprintf((char*)&command, state.command_template, password, filename);
+        // For every password within the task range.
+        // Build the command considering that password.
+        sprintf((char*)&command, cracking_state.command_template,
+                password, cracking_state.filename);
 
         fp = popen(command, "r");
         while (!feof(fp))
@@ -55,29 +61,39 @@ crack_password_worker (void *t_params)
             fgets((char*)&result, 200, fp);
             if (strcasestr(result, "ok") != NULL)
             {
-                state.password_found = password;
-                state.done = 1;
-
-                printf("Senha:%d\n", password);
+                // Password is correct. Inform other threads.
+                cracking_state.password_found = password;
+                cracking_state.done = 1;
             }
         }
+
         pclose(fp);
+
+        // Cyclical scheduling.
+        password += cracking_state.n_threads;
     }
 }
 
 
+///
+/// Crack Password.
+///
+/// Parallel API wrapper.
+///
 int
-crack_password (char* filename, int n_threads) {
-    int failed;
+crack_password (char* filename, int n_threads)
+{
+    int i, failed;
 
-    state.done = 0;
-    state.password_found = -1;
-    state.command_template = "unzip -P%d -t %s 2>&1";
+    cracking_state.done = 0;
+    cracking_state.password_found = -1;
+    cracking_state.filename = filename;
+    cracking_state.n_threads = n_threads;
+    cracking_state.command_template = "unzip -P%d -t %s 2>&1";
 
     for (i = 0; i < n_threads; i++)
     {
-        failed = pthread_create(&workers[i], NULL, crack_password_worker,
-                                (void *)&params[i]);
+        failed = pthread_create(&workers[i], NULL, pass_cracker, (void *)i);
         if (failed)
         {
             fprintf(stderr, "Failed to create thread (code: %d).\n", failed);
@@ -87,7 +103,7 @@ crack_password (char* filename, int n_threads) {
 
     for (i = 0; i < n_threads; i++) pthread_join(workers[i], NULL);
 
-    return state.password_found;
+    return cracking_state.password_found;
 }
 
 
@@ -107,11 +123,42 @@ main ()
     workers = (pthread_t *) malloc(n_threads * sizeof(pthread_t));
 
     t_start = rtclock();
-    crack_password(filename, n_threads);
-    t_end = rtclock();
+    int password_found = crack_password(filename, n_threads);
+    t_end   = rtclock();
 
+    printf("Senha:%d\n", password_found);
     fprintf(stdout, "%0.6lf\n", t_end - t_start);
 
     free(workers);
     return 0;
 }
+
+/*
+## arq1.in
+Senha:10000
+
+### Time elapsed
+* serial: 16.141632
+* parallel: 7.850181
+
+## arq2.in
+Senha:100000
+
+### Time elapsed
+* serial: 160.687960
+* parallel: 80.933334
+
+## arq3.in
+Senha:450000
+
+## Time elapsed
+* serial: 764.640047
+* parallel: 350.083878
+
+## arq4.in
+Senha:310000
+
+## Time elapsed
+* serial: 538.292841
+* parallel: 247.497154
+*/

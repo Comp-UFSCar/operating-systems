@@ -5,7 +5,9 @@
 #include <unistd.h>
 #include <sys/time.h>
 
+
 FILE *popen(const char *command, const char *type);
+
 
 double
 rtclock ()
@@ -37,7 +39,7 @@ main ()
 
     t_start = rtclock();
     for(i=0; i < 500000; i++) {
-        sprintf((char*)&cmd, finalcmd, i, filename);
+        sprintf((char *)&cmd, finalcmd, i, filename);
         //printf("Comando a ser executado: %s \n", cmd);
 
         fp = popen(cmd, "r");
