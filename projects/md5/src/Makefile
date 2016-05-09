@@ -1,6 +1,6 @@
 # Makefile for md5
 
-TARGET=md5
+TARGET=../build/md5
 OBJS=md5.o md5_bmark.o
 CFLAGS=-O2 -g -D_GNU_SOURCE -std=c99
 LDFLAGS= -fopenmp

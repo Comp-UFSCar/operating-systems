@@ -1,29 +1,29 @@
 /*
-*   MD5 Benchmark
-*   -------------
-*   File: md5_bmark.c
-*
-*   This is the main file for the md5 benchmark kernel. This benchmark was
-*   written as part of the StarBENCH benchmark suite at TU Berlin. It performs
-*   MD5 computation on a number of self-generated input buffers in parallel,
-*   automatically measuring execution time.
-*
-*   Copyright (C) 2011 Michael Andersch
-*
-*   This program is free software: you can redistribute it and/or modify
-*   it under the terms of the GNU General Public License as published by
-*   the Free Software Foundation, either version 3 of the License, or
-*   (at your option) any later version.
-*
-*   This program is distributed in the hope that it will be useful,
-*   but WITHOUT ANY WARRANTY; without even the implied warranty of
-*   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-*   GNU General Public License for more details.
-*
-*   You should have received a copy of the GNU General Public License
-*   along with this program.  If not, see <http://www.gnu.org/licenses/>.
-*
-*/
+ *   MD5 Benchmark
+ *   -------------
+ *   File: md5_bmark.c
+ *
+ *   This is the main file for the md5 benchmark kernel. This benchmark was
+ *   written as part of the StarBENCH benchmark suite at TU Berlin. It performs
+ *   MD5 computation on a number of self-generated input buffers in parallel,
+ *   automatically measuring execution time.
+ *
+ *   Copyright (C) 2011 Michael Andersch
+ *
+ *   This program is free software: you can redistribute it and/or modify
+ *   it under the terms of the GNU General Public License as published by
+ *   the Free Software Foundation, either version 3 of the License, or
+ *   (at your option) any later version.
+ *
+ *   This program is distributed in the hope that it will be useful,
+ *   but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *   GNU General Public License for more details.
+ *
+ *   You should have received a copy of the GNU General Public License
+ *   along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ *
+ */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -61,10 +61,10 @@ static data_t datasets[] = {
 };
 
 /*
-*   Function: initialize
-*   --------------------
-*   To initialize the benchmark parameters. Generates the input buffers from random data.
-*/
+ *   Function: initialize
+ *   --------------------
+ *   To initialize the benchmark parameters. Generates the input buffers from random data.
+ */
 int initialize(md5bench_t* args) {
     int index = args->input_set;
     if(index < 0 || index >= sizeof(datasets)/sizeof(datasets[0])) {
@@ -94,66 +94,85 @@ int initialize(md5bench_t* args) {
             return -1;
         }
         for(int j = 0; j < datasets[index].bufsize; j++)
-        *p++ = rand() % 255;
+            *p++ = rand() % 255;
     }
 
     return 0;
 }
 
 /*
-*   Function: process
-*   -----------------
-*   Processes one input buffer, delivering the digest into out.
-*/
+ *   Function: process
+ *   -----------------
+ *   Processes one input buffer, delivering the digest into out.
+ */
 void process(uint8_t* in, uint8_t* out, int bufsize) {
     MD5_CTX context;
     uint8_t digest[16];
 
-    MD5_Init(&context);
-    MD5_Update(&context, in, bufsize);
-    MD5_Final(digest, &context);
+    #pragma omp parallel
+    {
+        #pragma omp task
+        MD5_Init(&context);
+
+        #pragma omp task
+        MD5_Update(&context, in, bufsize);
+
+        #pragma omp task
+        MD5_Final(digest, &context);
+    }
 
     memcpy(out, digest, DIGEST_SIZE);
 }
 
 /*
-*   Function: run
-*   --------------------
-*   Main benchmarking function. If called, processes buffers with MD5
-*   until no more buffers available. The resulting message digests
-*   are written into consecutive locations in the preallocated output
-*   buffer.
-*/
+ *   Function: run
+ *   --------------------
+ *   Main benchmarking function. If called, processes buffers with MD5
+ *   until no more buffers available. The resulting message digests
+ *   are written into consecutive locations in the preallocated output
+ *   buffer.
+ */
 void run(md5bench_t* args) {
-    for(int i = 0; i < args->iterations; i++) {
-        int buffers_to_process = args->numinputs;
-        int next = 0;
-        uint8_t** in = args->inputs;
-        uint8_t* out = args->out;
+    #pragma omp parallel
+    {
+        #pragma omp single nowait
+        {
+            for(int i = 0; i < args->iterations; i++)
+            {
+                #pragma omp task
+                {
+                    int buffers_to_process = args->numinputs;
+                    int next = 0;
+                    uint8_t** in = args->inputs;
+                    uint8_t* out = args->out;
 
-        while(buffers_to_process > 0) {
-            process(in[next], out+next*DIGEST_SIZE, args->size);
-            next++;
-            buffers_to_process--;
+                    while(buffers_to_process > 0)
+                    {
+                        process(in[next], out+next*DIGEST_SIZE, args->size);
+                        next++;
+                        buffers_to_process--;
+                    }
+                }
+            }
         }
     }
 }
 
 /*
-*   Function: finalize
-*   ------------------
-*   Cleans up memory used by the benchmark for input and output buffers.
-*/
+ *   Function: finalize
+ *   ------------------
+ *   Cleans up memory used by the benchmark for input and output buffers.
+ */
 int finalize(md5bench_t* args) {
 
     char buffer[64];
     int offset = 0;
 
     for(int i = 0; i < args->numinputs; i++) {
-        #ifdef DEBUG
+#ifdef DEBUG
         sprintf(buffer, "Buffer %d has checksum ", i);
         fwrite(buffer, sizeof(char), strlen(buffer)+1, stdout);
-        #endif
+#endif
 
         for(int j = 0; j < DIGEST_SIZE*2; j+=2) {
             sprintf(buffer+j,   "%x", args->out[DIGEST_SIZE*i+j/2] & 0xf);
@@ -161,39 +180,39 @@ int finalize(md5bench_t* args) {
         }
         buffer[32] = '\0';
 
-        #ifdef DEBUG
+#ifdef DEBUG
         fwrite(buffer, sizeof(char), 32, stdout);
         fputc('\n', stdout);
-        #else
+#else
         printf("%s ", buffer);
-        #endif
+#endif
 
     }
-    #ifndef DEBUG
+#ifndef DEBUG
     printf("\n");
-    #endif
+#endif
 
     if(args->inputs) {
         for(int i = 0; i < args->numinputs; i++) {
             if(args->inputs[i])
-            free(args->inputs[i]);
+                free(args->inputs[i]);
         }
 
         free(args->inputs);
     }
 
     if(args->out)
-    free(args->out);
+        free(args->out);
 
     return 0;
 }
 
 
 /*
-*   Function: timediff
-*   ------------------
-*   Compute the difference between timers starttime and finishtime in msecs.
-*/
+ *   Function: timediff
+ *   ------------------
+ *   Compute the difference between timers starttime and finishtime in msecs.
+ */
 long timediff(timer* starttime, timer* finishtime)
 {
     long msec;
@@ -218,6 +237,7 @@ int main(int argc, char** argv) {
     scanf("%d", &args.iterations);
     args.outflag = 1;
 
+    omp_set_num_threads(nt);
 
     // Parameter initialization
     if(initialize(&args)) {
@@ -244,3 +264,80 @@ int main(int argc, char** argv) {
 
     return 0;
 }
+
+/*
+# Results
+## System Info
+
+Operating System: 3.19.0-58-generic NAME="Ubuntu" VERSION="14.04.4 LTS,
+                  Trusty Tahr" ID=ubuntu ID_LIKE=debian
+                  PRETTY_NAME="Ubuntu 14.04.4 LTS" VERSION_ID="14.04"
+CPU Name: 4th generation Intel(R) Core(TM) Processor family
+Frequency: 2.4 GHz
+Logical CPU Count: 8
+
+## Sequential Program Version
+
+Elapsed Time:	11.157s
+    Clockticks:	36,426,054,639
+    Instructions Retired:	63,922,095,883
+    CPI Rate:	0.570
+    MUX Reliability:	0.974
+    Front-End Bound:	6.4%
+    Bad Speculation:	0.4%
+    Back-End Bound:	45.4%
+        Memory Bound:	1.9%
+            L1 Bound:	0.028
+            L3 Bound:
+                Contested Accesses:	0.000
+                Data Sharing:	0.000
+                LLC Hit:	0.000
+                SQ Full:	0.000
+            DRAM Bound:
+                Memory Latency:
+                    LLC Miss:	0.000
+            Store Bound:	0.000
+        Core Bound:	43.5%
+            Divider:	0.000
+            Port Utilization:	0.693
+                Cycles of 0 Ports Utilized:	0.034
+                Cycles of 1 Port Utilized:	0.451
+                Cycles of 2 Ports Utilized:	0.237
+                Cycles of 3+ Ports Utilized:	0.224
+    Retiring:	47.8%
+    Total Thread Count:	1
+    Paused Time:	0s
+
+## Parallel Program Version
+
+    Elapsed Time:	4.853s
+        Clockticks:	36,484,054,726
+        Instructions Retired:	63,944,095,916
+        CPI Rate:	0.571
+        MUX Reliability:	0.926
+        Front-End Bound:	3.4%
+        Bad Speculation:	0.4%
+        Back-End Bound:	46.3%
+            Memory Bound:	1.5%
+                L1 Bound:	0.024
+                L3 Bound:
+                    Contested Accesses:	0.000
+                    Data Sharing:	0.000
+                    LLC Hit:	0.000
+                    SQ Full:	0.000
+                DRAM Bound:
+                    Memory Latency:
+                        LLC Miss:	0.009
+                Store Bound:	0.001
+            Core Bound:	44.7%
+                Divider:	0.000
+                Port Utilization:	0.735
+                    Cycles of 0 Ports Utilized:	0.025
+                    Cycles of 1 Port Utilized:	0.475
+                    Cycles of 2 Ports Utilized:	0.259
+                    Cycles of 3+ Ports Utilized:	0.218
+        Retiring:	50.0%
+        Total Thread Count:	4
+        Paused Time:	0s
+ */
+
