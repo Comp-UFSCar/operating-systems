@@ -5,6 +5,8 @@
 
 
 #define COMMENT "Histogram_GPU"
+#define N_BINS 64
+#define N_THREADS 128
 #define RGB_COMPONENT_COLOR 255
 
 typedef struct {
@@ -27,7 +29,8 @@ double rtclock()
 }
 
 
-static PPMImage *readPPM(const char *filename) {
+static PPMImage *readPPM(const char *filename)
+{
     char buff[16];
     PPMImage *img;
     FILE *fp;
@@ -97,70 +100,117 @@ static PPMImage *readPPM(const char *filename) {
 }
 
 
-void Histogram(PPMImage *image, float *h) {
+__global__ void _k_histogram(PPMPixel *image_data, float *h, int n_pixels)
+{
+    int pixel_id = threadIdx.x,
+        this_bin = blockIdx.x;
 
-    int i, j,  k, l, x, count;
-    int rows, cols;
+    // Initialize all bins. Notice I only have to check if threadIdx is zero,
+    // because the number of blocks follows the number of bins.
+    if (threadIdx.x == 0) h[this_bin] = 0;
+    __syncthreads();
 
-    float n = image->y * image->x;
+    while (pixel_id < n_pixels)
+    {
+        // Maps a pixel value to a unique bin in the 64-length array.
+        int should_be_at = image_data[pixel_id].red * 16 +
+                           image_data[pixel_id].green * 4 +
+                           image_data[pixel_id].blue;
 
-    cols = image->x;
-    rows = image->y;
+        if (should_be_at == this_bin)
+            atomicAdd(&h[this_bin], 1);
 
-    //printf("%d, %d\n", rows, cols );
+        // Translate per number of threads. The other threads will take care
+        // of the rest of the data that wasn't covered by this one.
+        pixel_id += N_THREADS;
+    }
+    __syncthreads();
 
-    for (i = 0; i < n; i++) {
+    // Normalize all bins.
+    if (threadIdx.x == 0) h[this_bin] /= n_pixels;
+}
+
+
+void parallel_histogram(PPMImage *image, float *h)
+{
+    int i,
+        n_pixels = image->y * image->x;
+
+    for (i = 0; i < n_pixels; i++)
+    {
         image->data[i].red = floor((image->data[i].red * 4) / 256);
         image->data[i].blue = floor((image->data[i].blue * 4) / 256);
         image->data[i].green = floor((image->data[i].green * 4) / 256);
     }
 
+    PPMPixel *dimage_data;
+    float *dh;
 
-    count = 0;
-    x = 0;
-    for (j = 0; j <= 3; j++) {
-        for (k = 0; k <= 3; k++) {
-            for (l = 0; l <= 3; l++) {
-                for (i = 0; i < n; i++) {
-                    if (image->data[i].red == j
-                        && image->data[i].green == k
-                        && image->data[i].blue == l) {
-                        count++;
-                    }
-                }
-                h[x] = count / n; //Histograma normalizado
-                count = 0;
-                x++;
-            }
-        }
-    }
-}
+    int size_of_image = n_pixels * sizeof(PPMPixel),
+        size_of_bins  = N_BINS * sizeof(float);
 
-int main(int argc, char *argv[]) {
-
-    if( argc != 2 ) {
-        printf("Too many or no one arguments supplied.\n");
-    }
-
-    double t_start, t_end;
-    int i;
-    char *filename = argv[1]; //Recebendo o arquivo!;
-
-    //scanf("%s", filename);
-    PPMImage *image = readPPM(filename);
-
-    float *h = (float*)malloc(sizeof(float) * 64);
-
-    //Inicializar h
-    for(i=0; i < 64; i++) h[i] = 0.0;
+    double t_start = rtclock();
+    cudaMalloc((void **)&dimage_data, size_of_image);
+    cudaMalloc((void **)&dh, size_of_bins);
+    double t_end = rtclock();
+    // fprintf(stdout, "\nBuffer creating time: %0.6lfs\n", t_end - t_start);
 
     t_start = rtclock();
-    Histogram(image, h);
+    cudaMemcpy(dimage_data, image->data, size_of_image,
+               cudaMemcpyHostToDevice);
     t_end = rtclock();
+    // fprintf(stdout, "\nHtD memory copy time: %0.6lfs\n", t_end - t_start);
 
-    for (i = 0; i < 64; i++){
-        printf("%f ", h[i]);
-    }
+
+    t_start = rtclock();
+    _k_histogram<<<N_BINS, N_THREADS>>>(dimage_data, dh, n_pixels);
+    cudaDeviceSynchronize();
+    t_end = rtclock();
+    // fprintf(stdout, "\nKernel time: %0.6lfs\n", t_end - t_start);
+
+    t_start = rtclock();
+    cudaMemcpy(h, dh, size_of_bins, cudaMemcpyDeviceToHost);
+    t_end = rtclock();
+    // fprintf(stdout, "\nKernel time: %0.6lfs\n", t_end - t_start);
+
+    cudaFree(dimage_data); cudaFree(dh);
+}
+
+int main(int argc, char *argv[])
+{
+    if( argc != 2 ) printf("Too many or no one arguments supplied.\n");
+
+    char *filename = argv[1];
+    PPMImage *image = readPPM(filename);
+
+    float *h = (float*)malloc(sizeof(float) * N_BINS);
+
+    double t_start = rtclock();
+    parallel_histogram(image, h);
+    double t_end = rtclock();
+
+    int i;
+    for (i = 0; i < 64; i++) printf("%.3f ", h[i]);
     fprintf(stdout, "\n%0.6lfs\n", t_end - t_start);
     free(h);
 }
+
+/*
+ * # Report Table
+ *
+ * # | File    | ST        | BCT       | HtDT      | KT        | DtHT      | TT        | S
+ * --------------------------------------------------------------------------------------------------
+ * 1 | arq1.in | 0.205821s | 0.035295s | 0.000437s | 0.014306s | 0.000018s | 0.069355s | 2.967644726s
+ * 2 | arq2.in | 0.376651s | 0.038361s | 0.001041s | 0.035484s | 0.000017s | 0.178696s | 2.107775216s
+ * 3 | arq3.in | 1.367025s | 0.035133s | 0.003970s | 0.141030s | 0.000019s | 0.339280s | 4.029194176s
+ *
+ * Legend:
+ * * F    : file
+ * * ST   : Serial Time
+ * * BCT  : Buffer Creation Time
+ * * HtDT : Host to Device Offload Time
+ * * KT   : Kernel Time
+ * * DtHT : Device to Host Offload Time
+ * * TT   : Total Time
+ * * S    : Speedup
+ */
