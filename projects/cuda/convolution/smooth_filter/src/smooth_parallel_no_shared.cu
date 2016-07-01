@@ -19,9 +19,9 @@
 ///
 ///   input   | CPU_Serial  | GPU_NOShared | GPU_Shared | Speedup (CPU/GPUSM)
 ///  _______________________________________________________________________
-/// | arq1.in |  0.172154   |  0.047532    | 0.044660   | 3,854769
-/// | arq2.in |  0.371454   |  0.047155    | 0.043899   | 8,461559
-/// | arq3.in |  1.533677   |  0.088398    | 0.073371   | 20,90304
+/// | arq1.in |  0.172154   |  0.110547    | 0.044660   | 0.7644371972384331
+/// | arq2.in |  0.371454   |  8.289333    | 0.043899   | 1.2062996371151598
+/// | arq3.in |  1.533677   |  96.001373   | 0.073371  | 1.0988451435378443
 ///
 ///
 /// Table 2: Reduction ratio
@@ -160,41 +160,10 @@ void writePPM(PPMImage *img) {
 
 __global__ void _k_conv(PPMPixel *image, PPMPixel *out, int lines, int columns)
 {
-    // Loading strategy is "sliding window":
-    // threads load subsequential elements from top to bottom, left to right.
-    __shared__ PPMPixel image_s[OUT_TILE_WIDTH + MASK_WIDTH -1][OUT_TILE_WIDTH + MASK_WIDTH -1];
-
     const int i_out = blockIdx.y*blockDim.y + threadIdx.y,
               j_out = blockIdx.x*blockDim.y + threadIdx.x,
               i0    = i_out - (MASK_WIDTH -1) / 2,
               j0    = j_out - (MASK_WIDTH -1) / 2;
-
-    // Slide vertically...
-    int i = 0;
-    while (threadIdx.y + i < OUT_TILE_WIDTH + MASK_WIDTH - 1)
-    {
-        // Slide horizontally...
-        int j = 0;
-        while (threadIdx.x + j < OUT_TILE_WIDTH + MASK_WIDTH - 1)
-        {
-            if (0 <= i0 + i && i0 + i < lines && 0 <= j0 + j && j0 + j < columns)
-            {
-                image_s[threadIdx.y + i][threadIdx.x + j].red   = image[(i0 + i) * columns + j0 + j].red;
-                image_s[threadIdx.y + i][threadIdx.x + j].green = image[(i0 + i) * columns + j0 + j].green;
-                image_s[threadIdx.y + i][threadIdx.x + j].blue  = image[(i0 + i) * columns + j0 + j].blue;
-            }
-            else
-            {
-                image_s[threadIdx.y + i][threadIdx.x + j].red   = 0;
-                image_s[threadIdx.y + i][threadIdx.x + j].green = 0;
-                image_s[threadIdx.y + i][threadIdx.x + j].blue  = 0;
-            }
-            j += OUT_TILE_WIDTH;
-        }
-        i += OUT_TILE_WIDTH;
-    }
-
-    __syncthreads();
 
     if (i_out < lines && j_out < columns)
     {
@@ -202,12 +171,14 @@ __global__ void _k_conv(PPMPixel *image, PPMPixel *out, int lines, int columns)
         r=g=b=0;
 
         for (int i = 0; i < MASK_WIDTH; i++)
-            for (int j = 0; j < MASK_WIDTH; j++)
-            {
-                r += image_s[threadIdx.y + i][threadIdx.x + j].red;
-                g += image_s[threadIdx.y + i][threadIdx.x + j].green;
-                b += image_s[threadIdx.y + i][threadIdx.x + j].blue;
-            }
+            if (-1 < i0 + i && i0 + i < lines)
+                for (int j = 0; j < MASK_WIDTH; j++)
+                    if (-1 < j0 + j && j0 + j < columns)
+                    {
+                        r += image[(i0 + i)*columns + j0 + j].red;
+                        g += image[(i0 + i)*columns + j0 + j].green;
+                        b += image[(i0 + i)*columns + j0 + j].blue;
+                    }
 
         out[i_out * columns + j_out].red   = r / (MASK_WIDTH*MASK_WIDTH);
         out[i_out * columns + j_out].green = g / (MASK_WIDTH*MASK_WIDTH);

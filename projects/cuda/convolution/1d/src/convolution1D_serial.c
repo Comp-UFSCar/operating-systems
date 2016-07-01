@@ -11,7 +11,7 @@ void Convolution1D(int *N, int *P, int *M, int n) {
     for(i=0; i < n; i++){
         int Pvalue = 0;
         int N_start_point = i - ((Mask_Width-1)/2);
-        for(j = 0; j < Mask_Width; j++){
+        for(j = 0; j < Mask_Width; j++) {
             if(N_start_point+j >=0 && N_start_point+j < n){
                 Pvalue += N[N_start_point+j]*M[j];
             }
